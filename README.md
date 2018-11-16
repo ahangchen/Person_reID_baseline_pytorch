@@ -1,9 +1,26 @@
 ## Person_reID_baseline_pytorch
 
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/layumi/Person_reID_baseline_pytorch.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/layumi/Person_reID_baseline_pytorch/context:python)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/layumi/Person_reID_baseline_pytorch.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/layumi/Person_reID_baseline_pytorch/alerts/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](https://opensource.org/licenses/MIT)
+
 Baseline Code (with bottleneck) for Person-reID (pytorch).
 It is consistent with the new baseline result in [Beyond Part Models: Person Retrieval with Refined Part Pooling](https://arxiv.org/abs/1711.09349) and [Camera Style Adaptation for Person Re-identification](https://arxiv.org/abs/1711.10295).
 
-We arrived **Rank@1=88.24%, mAP=70.68%** only with softmax loss.
+We arrived **Rank@1=88.24%, mAP=70.68%** only with softmax loss. 
+
+- If you are new to person re-ID, you may check out our [tutorial](https://github.com/layumi/Person_reID_baseline_pytorch/tree/master/tutorial) first.
+
+![](https://github.com/layumi/Person_reID_baseline_pytorch/blob/master/show.png)
+
+Now we have supported:
+- Part-based Convolutional Baseline(PCB)
+- Multiple Query Evaluation
+- Re-Ranking
+- Random Erasing
+- ResNet/DenseNet
+- Visualize Training Curves
+- Visualize Ranking Result
 
 Here we provide hyperparameters and architectures, that were used to generate the result. 
 Some of them (i.e. learning rate) are far from optimal. Do not hesitate to change them and see the effect. 
@@ -12,7 +29,24 @@ P.S. With similar structure, we arrived **Rank@1=87.74% mAP=69.46%** with Matcon
 You may refer to [Here](https://github.com/layumi/Person_reID_baseline_matconvnet).
 Different framework need to be tuned in a different way.
 
-**What's new:**  [PCB](https://arxiv.org/abs/1711.09349) is added. You may use '--PCB' to use this model. It can achieve around **Rank@1=92.73% mAP=78.16%**. 
+## Some News
+**What's new:** Visualizing ranking result is added.
+```bash
+python prepare.py
+python train.py
+python test.py
+python demo.py --query_index 777
+```
+
+**What's new:** Multiple-query Evaluation is added. The multiple-query result is about **Rank@1=91.95% mAP=78.06%**. 
+```bash
+python prepare.py
+python train.py
+python test.py --multi
+python evaluate_gpu.py
+```
+
+**What's new:**  [PCB](https://arxiv.org/abs/1711.09349) is added. You may use '--PCB' to use this model. It can achieve around **Rank@1=92.73% mAP=78.16%**. I used a GPU (P40) with 16GB Memory. You may try apply smaller batchsize and choose the smaller learning rate (for stability) to run. 
 ```bash
 python train.py --PCB --batchsize 64 --name PCB-64
 python test.py --PCB --name PCB-64
@@ -20,9 +54,9 @@ python test.py --PCB --name PCB-64
 
 **What's new:** You may try `evaluate_gpu.py` to conduct a faster evaluation with GPU.
 
-**What's new:** You may apply '--use_dense' to use `DenseNet-121`. It can easily arrive **Rank@1=89.91% mAP=73.58%**. Trained DenseNet-121 model can be found at [GoogleDrive](https://drive.google.com/open?id=1NgZWnYBCzESgKNzLeoWUMxggZ6SSEaZL).(Note that ResNet-50 is a more common choice as the baseline.)
+**What's new:** You may apply '--use_dense' to use `DenseNet-121`. It can easily arrive **Rank@1=89.91% mAP=73.58%**. ~~Trained DenseNet-121 model can be found at [GoogleDrive](https://drive.google.com/open?id=1NgZWnYBCzESgKNzLeoWUMxggZ6SSEaZL).(Note that ResNet-50 is a more common choice as the baseline.)~~
 
-**What's new：** Trained ResNet-50 model is available at [GoogleDrive](https://drive.google.com/open?id=1__x0qNJ3T654wTghmuRjydn42NsAZW_M).
+~~**What's new：** Trained ResNet-50 model is available at [GoogleDrive](https://drive.google.com/open?id=1__x0qNJ3T654wTghmuRjydn42NsAZW_M).~~
 
 **What's new:** Re-ranking is added to evaluation. The re-ranked result is **Rank@1=90.20% mAP=84.76%**.
 
@@ -43,8 +77,6 @@ We add one linear layer(bottleneck), one batchnorm layer and relu.
 - Numpy
 - Pytorch 0.3+
 
-(For Pytorch 0.5, you may need to change [some code](https://github.com/layumi/Person_reID_baseline_pytorch/issues/33).)
-
 **(Some reports found that updating numpy can arrive the right accuracy. If you only get 50~80 Top1 Accuracy, just try it.)**
 We have successfully run the code based on numpy 1.12.1 and 1.13.1 .
 
@@ -59,7 +91,7 @@ python setup.py install
 ```
 Because pytorch and torchvision are ongoing projects.
 
-Here we noted that our code is tested based on Pytorch 0.3.0 and Torchvision 0.2.0.
+Here we noted that our code is tested based on Pytorch 0.3.0/0.4.0 and Torchvision 0.2.0.
 
 ## Dataset & Preparation
 Download [Market1501 Dataset](http://www.liangzheng.org/Project/project_reid.html)
@@ -72,11 +104,6 @@ Remember to change the dataset path to your own path.
 
 Futhermore, you also can test our code on [DukeMTMC-reID Dataset](https://github.com/layumi/DukeMTMC-reID_evaluation).
 Our baseline code is not such high on DukeMTMC-reID **Rank@1=64.23%, mAP=43.92%**. Hyperparameters are need to be tuned.
-
-To save trained model, we make a dir.
-```bash
-mkdir model 
-```
 
 ## Train
 Train a model by
@@ -103,9 +130,11 @@ python train.py --gpu_ids 0 --name ft_ResNet50 --train_all --batchsize 32  --dat
 ## Test
 Use trained model to extract feature by
 ```bash
-python test.py --gpu_ids 0 --name ft_ResNet50 --test_dir your_data_path  --which_epoch 59
+python test.py --gpu_ids 0 --name ft_ResNet50 --test_dir your_data_path  --batchsize 32 --which_epoch 59
 ```
 `--gpu_ids` which gpu to run.
+
+`--batchsize` batch size.
 
 `--name` the dir name of trained model.
 

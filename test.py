@@ -24,9 +24,10 @@ parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1
 parser.add_argument('--which_epoch',default='last', type=str, help='0,1,2,3...or last')
 parser.add_argument('--test_dir',default='/home/zzd/Market/pytorch',type=str, help='./test_data')
 parser.add_argument('--name', default='ft_ResNet50', type=str, help='save model path')
-parser.add_argument('--batchsize', default=100, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
 parser.add_argument('--PCB', action='store_true', help='use PCB' )
+parser.add_argument('--multi', action='store_true', help='use multiple query' )
 
 opt = parser.parse_args()
 
@@ -77,10 +78,15 @@ if opt.PCB:
 
 
 data_dir = test_dir
-image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query']}
-dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=False, num_workers=16) for x in ['gallery','query']}
 
+if opt.multi:
+    image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query','multi-query']}
+    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
+                                             shuffle=False, num_workers=16) for x in ['gallery','query','multi-query']}
+else:
+    image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query']}
+    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
+                                             shuffle=False, num_workers=16) for x in ['gallery','query']}
 class_names = image_datasets['query'].classes
 use_gpu = torch.cuda.is_available()
 
@@ -118,7 +124,7 @@ def extract_feature(model,dataloaders):
         else:
             ff = torch.FloatTensor(n,2048).zero_()
         if opt.PCB:
-            ff = torch.FloatTensor(n,2048,6).zero_() # we have four parts
+            ff = torch.FloatTensor(n,2048,6).zero_() # we have six parts
         for i in range(2):
             if(i==1):
                 img = fliplr(img)
@@ -128,8 +134,10 @@ def extract_feature(model,dataloaders):
             ff = ff+f
         # norm feature
         if opt.PCB:
-            # feature size (n,2048,4)
-            fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)
+            # feature size (n,2048,6)
+            # 1. To treat every part equally, I calculate the norm for every 2048-dim part feature.
+            # 2. To keep the cosine score==1, sqrt(6) is added to norm the whole feature (2048*6).
+            fnorm = torch.norm(ff, p=2, dim=1, keepdim=True) * np.sqrt(6) 
             ff = ff.div(fnorm.expand_as(ff))
             ff = ff.view(ff.size(0), -1)
         else:
@@ -143,7 +151,8 @@ def get_id(img_path):
     camera_id = []
     labels = []
     for path, v in img_path:
-        filename = path.split('/')[-1]
+        #filename = path.split('/')[-1]
+        filename = os.path.basename(path)
         label = filename[0:4]
         camera = filename.split('c')[1]
         if label[0:2]=='-1':
@@ -158,6 +167,10 @@ query_path = image_datasets['query'].imgs
 
 gallery_cam,gallery_label = get_id(gallery_path)
 query_cam,query_label = get_id(query_path)
+
+if opt.multi:
+    mquery_path = image_datasets['multi-query'].imgs
+    mquery_cam,mquery_label = get_id(mquery_path)
 
 ######################################################################
 # Load Collected data Trained model
@@ -187,7 +200,12 @@ if use_gpu:
 # Extract feature
 gallery_feature = extract_feature(model,dataloaders['gallery'])
 query_feature = extract_feature(model,dataloaders['query'])
-
+if opt.multi:
+    mquery_feature = extract_feature(model,dataloaders['multi-query'])
+    
 # Save to Matlab for check
 result = {'gallery_f':gallery_feature.numpy(),'gallery_label':gallery_label,'gallery_cam':gallery_cam,'query_f':query_feature.numpy(),'query_label':query_label,'query_cam':query_cam}
 scipy.io.savemat('pytorch_result.mat',result)
+if opt.multi:
+    result = {'mquery_f':mquery_feature.numpy(),'mquery_label':mquery_label,'mquery_cam':mquery_cam}
+    scipy.io.savemat('multi_query.mat',result)

@@ -20,6 +20,9 @@ import os
 from model import ft_net, ft_net_dense, PCB
 from random_erasing import RandomErasing
 import json
+from shutil import copyfile
+
+version =  torch.__version__
 
 ######################################################################
 # Options
@@ -108,15 +111,16 @@ image_datasets['val'] = datasets.ImageFolder(os.path.join(data_dir, 'val'),
                                           data_transforms['val'])
 
 dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=True, num_workers=16)
+                                             shuffle=True, num_workers=8) # 8 workers may work faster
               for x in ['train', 'val']}
 dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
 class_names = image_datasets['train'].classes
 
 use_gpu = torch.cuda.is_available()
 
+since = time.time()
 inputs, classes = next(iter(dataloaders['train']))
-
+print(time.time()-since)
 ######################################################################
 # Training the model
 # ------------------
@@ -156,11 +160,14 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                 model.train(False)  # Set model to evaluate mode
 
             running_loss = 0.0
-            running_corrects = 0
+            running_corrects = 0.0
             # Iterate over data.
             for data in dataloaders[phase]:
                 # get the inputs
                 inputs, labels = data
+                now_batch_size,c,h,w = inputs.shape
+                if now_batch_size<opt.batchsize: # skip the last batch
+                    continue
                 #print(inputs.shape)
                 # wrap them in Variable
                 if use_gpu:
@@ -197,8 +204,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                     optimizer.step()
 
                 # statistics
-                running_loss += loss.data[0]
-                running_corrects += torch.sum(preds == labels.data)
+                if int(version[2]) > 3: # for the new version like 0.4.0 and 0.5.0
+                    running_loss += loss.item() * now_batch_size
+                else :  # for the old version like 0.3.0 and 0.3.1
+                    running_loss += loss.data[0] * now_batch_size
+                running_corrects += float(torch.sum(preds == labels.data))
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects / dataset_sizes[phase]
@@ -253,7 +263,7 @@ def save_network(network, epoch_label):
     save_filename = 'net_%s.pth'% epoch_label
     save_path = os.path.join('./model',name,save_filename)
     torch.save(network.cpu().state_dict(), save_path)
-    if torch.cuda.is_available:
+    if torch.cuda.is_available():
         network.cuda(gpu_ids[0])
 
 
@@ -324,6 +334,9 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=40, gamma=0.1)
 dir_name = os.path.join('./model',name)
 if not os.path.isdir(dir_name):
     os.mkdir(dir_name)
+#record every run
+copyfile('./train.py', dir_name+'/train.py')
+copyfile('./model.py', dir_name+'/model.py')
 
 # save opts
 with open('%s/opts.json'%dir_name,'w') as fp:
